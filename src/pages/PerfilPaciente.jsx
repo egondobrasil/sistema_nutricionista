@@ -2,6 +2,28 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import Sidebar from '../components/Sidebar'
+import { 
+  User, 
+  Activity, 
+  FileText, 
+  Plus, 
+  Save, 
+  ChevronLeft, 
+  CheckCircle, 
+  Calendar,
+  Weight,
+  Clock,
+  ArrowRight
+} from 'lucide-react'
+import { 
+  LineChart, 
+  Line, 
+  XAxis, 
+  YAxis, 
+  CartesianGrid, 
+  Tooltip, 
+  ResponsiveContainer 
+} from 'recharts'
 
 const PerfilPaciente = () => {
   const { id } = useParams()
@@ -11,6 +33,7 @@ const PerfilPaciente = () => {
   const [error, setError] = useState(null)
   const [success, setSuccess] = useState(false)
   const [activeTab, setActiveTab] = useState('pessoal')
+  const [showModal, setShowModal] = useState(false)
 
   const [formData, setFormData] = useState({
     nome: '',
@@ -38,28 +61,61 @@ const PerfilPaciente = () => {
     observacoes: ''
   })
 
+  const [consultas, setConsultas] = useState([])
+  const [planos, setPlanos] = useState([])
   const [idade, setIdade] = useState(null)
   const [imc, setImc] = useState(null)
-  const [incompleteTabs, setIncompleteTabs] = useState([])
+
+  const [novaConsulta, setNovaConsulta] = useState({
+    data_consulta: new Date().toISOString().split('T')[0],
+    peso: '',
+    cintura: '',
+    quadril: '',
+    percentual_gordura: '',
+    observacoes: '',
+    proximo_retorno: ''
+  })
 
   useEffect(() => {
-    const fetchPaciente = async () => {
-      const { data, error } = await supabase
+    fetchData()
+  }, [id])
+
+  const fetchData = async () => {
+    setLoading(true)
+    try {
+      // Fetch Patient
+      const { data: patient, error: pError } = await supabase
         .from('pacientes')
         .select('*')
         .eq('id', id)
         .single()
+      if (pError) throw pError
+      setFormData(patient)
 
-      if (error) {
-        setError('Não foi possível carregar os dados do paciente.')
-      } else {
-        setFormData(data)
-      }
+      // Fetch Consultations
+      const { data: consultations, error: cError } = await supabase
+        .from('consultas')
+        .select('*')
+        .eq('paciente_id', id)
+        .order('data_consulta', { ascending: false })
+      if (cError) throw cError
+      setConsultas(consultas)
+
+      // Fetch Plans
+      const { data: plans, error: plError } = await supabase
+        .from('planos_alimentares')
+        .select('*')
+        .eq('paciente_id', id)
+        .order('created_at', { ascending: false })
+      if (plError) throw plError
+      setPlanos(plans)
+
+    } catch (err) {
+      setError('Erro ao carregar dados: ' + err.message)
+    } finally {
       setLoading(false)
     }
-
-    fetchPaciente()
-  }, [id])
+  }
 
   useEffect(() => {
     if (formData.data_nascimento) {
@@ -77,120 +133,95 @@ const PerfilPaciente = () => {
       const h = parseFloat(formData.altura) / 100
       const w = parseFloat(formData.peso_inicial)
       if (h > 0) {
-        const val = (w / (h * h)).toFixed(1)
-        setImc(val)
+        setImc((w / (h * h)).toFixed(1))
       }
-    } else {
-      setImc(null)
     }
   }, [formData.peso_inicial, formData.altura])
 
-  // Lógica de verificação de abas incompletas
-  useEffect(() => {
-    const incomplete = []
-    if (!formData.nome || !formData.data_nascimento || !formData.sexo || !formData.telefone || !formData.email) {
-      incomplete.push('pessoal')
-    }
-    if (!formData.peso_inicial || !formData.altura || formData.objetivos.length === 0 || formData.patologias.length === 0) {
-      incomplete.push('clinico')
-    }
-    if (!formData.refeicoes_por_dia || !formData.litros_agua || !formData.horario_acorda || !formData.horario_dorme) {
-      incomplete.push('habitos')
-    }
-    setIncompleteTabs(incomplete)
-  }, [formData])
-
-  const maskPhone = (value) => {
-    if (!value) return ""
-    const digits = value.replace(/\D/g, "").slice(0, 11)
-    if (digits.length <= 2) return `(${digits}`
-    if (digits.length <= 6) return `(${digits.slice(0, 2)}) ${digits.slice(2)}`
-    if (digits.length <= 10) return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`
-    return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`
-  }
-
-  const formatTime = (value) => {
-    if (!value) return ''
-    const str = value.toString().replace(/\D/g, '')
-    if (!str) return ''
-    if (str.length <= 2) {
-      const h = parseInt(str)
-      if (h >= 0 && h <= 23) return `${str.padStart(2, '0')}:00`
-      return '00:00'
-    }
-    if (str.length === 3) return `0${str[0]}:${str.slice(1)}`
-    if (str.length === 4) return `${str.slice(0, 2)}:${str.slice(2)}`
-    return value
-  }
-
-  const handleMultiSelect = (field, value) => {
-    setFormData(prev => {
-      const current = prev[field] || []
-      if (value === 'Nenhum') return { ...prev, [field]: ['Nenhum'] }
-      const filtered = current.filter(v => v !== 'Nenhum')
-      if (filtered.includes(value)) {
-        return { ...prev, [field]: filtered.filter(v => v !== value) }
-      } else {
-        return { ...prev, [field]: [...filtered, value] }
-      }
-    })
-  }
-
-  const handleChange = (e) => {
-    const { id, value, type, checked } = e.target
-    if (id === 'telefone' || id === 'whatsapp') {
-      const maskedValue = maskPhone(value)
-      setFormData(prev => ({ ...prev, [id]: maskedValue }))
-      return
-    }
-    setFormData(prev => ({
-      ...prev,
-      [id]: type === 'checkbox' ? checked : value
-    }))
-  }
-
-  const handleUpdate = async (e) => {
+  const handleUpdatePatient = async (e) => {
     e.preventDefault()
     setSaving(true)
-    setError(null)
-
     const { error: dbError } = await supabase
       .from('pacientes')
       .update({
         ...formData,
-        peso_inicial: formData.peso_inicial ? parseFloat(formData.peso_inicial) : null,
-        altura: formData.altura ? parseFloat(formData.altura) : null,
-        litros_agua: formData.litros_agua ? parseFloat(formData.litros_agua) : null,
-        refeicoes_por_dia: formData.refeicoes_por_dia ? parseInt(formData.refeicoes_por_dia) : null,
+        peso_inicial: parseFloat(formData.peso_inicial),
+        altura: parseFloat(formData.altura),
+        litros_agua: parseFloat(formData.litros_agua),
+        refeicoes_por_dia: parseInt(formData.refeicoes_por_dia)
       })
       .eq('id', id)
 
     if (dbError) {
-      setError(`Erro ao atualizar: ${dbError.message}`)
-      setSaving(false)
+      setError(dbError.message)
     } else {
       setSuccess(true)
       setTimeout(() => setSuccess(false), 3000)
-      setSaving(false)
     }
+    setSaving(false)
   }
 
+  const handleAddConsulta = async (e) => {
+    e.preventDefault()
+    setSaving(true)
+    const { error: dbError } = await supabase
+      .from('consultas')
+      .insert([{
+        ...novaConsulta,
+        paciente_id: id,
+        peso: parseFloat(novaConsulta.peso),
+        cintura: novaConsulta.cintura ? parseFloat(novaConsulta.cintura) : null,
+        quadril: novaConsulta.quadril ? parseFloat(novaConsulta.quadril) : null,
+        percentual_gordura: novaConsulta.percentual_gordura ? parseFloat(novaConsulta.percentual_gordura) : null,
+      }])
+
+    if (dbError) {
+      setError(dbError.message)
+    } else {
+      setShowModal(false)
+      setNovaConsulta({
+        data_consulta: new Date().toISOString().split('T')[0],
+        peso: '',
+        cintura: '',
+        quadril: '',
+        percentual_gordura: '',
+        observacoes: '',
+        proximo_retorno: ''
+      })
+      fetchData()
+    }
+    setSaving(false)
+  }
+
+  const chartData = [...consultas]
+    .reverse()
+    .map(c => ({
+      data: new Date(c.data_consulta).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }),
+      peso: c.peso
+    }))
+
   const renderMultiChoice = (label, field, options) => (
-    <div className="form-group" style={{ marginBottom: '1.5rem' }}>
+    <div className="form-group">
       <label>{label}</label>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginTop: '0.5rem' }}>
         {options.map(opt => (
           <button
             key={opt}
             type="button"
-            onClick={() => handleMultiSelect(field, opt)}
+            onClick={() => {
+              const current = formData[field] || []
+              const next = current.includes(opt) 
+                ? current.filter(v => v !== opt) 
+                : [...current, opt]
+              setFormData({...formData, [field]: next})
+            }}
             style={{
               padding: '0.5rem 1rem',
               borderRadius: '20px',
               border: '1.5px solid var(--border)',
               background: formData[field]?.includes(opt) ? 'var(--primary)' : 'transparent',
               color: formData[field]?.includes(opt) ? 'white' : 'var(--text-light)',
-              fontSize: '0.8rem',
+              fontSize: '0.75rem',
               cursor: 'pointer',
               transition: 'all 0.2s'
             }}
@@ -205,7 +236,7 @@ const PerfilPaciente = () => {
   if (loading) return (
     <div className="app-layout">
       <Sidebar />
-      <main className="main-content"><div className="empty-state">Carregando ficha do paciente...</div></main>
+      <main className="main-content"><div className="empty-state">Carregando perfil do paciente...</div></main>
     </div>
   )
 
@@ -213,179 +244,265 @@ const PerfilPaciente = () => {
     <div className="app-layout">
       <Sidebar />
       <main className="main-content">
-        <header className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <header className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
           <div>
+            <button onClick={() => navigate('/pacientes')} style={{ background: 'transparent', border: 'none', color: 'var(--text-light)', display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem', cursor: 'pointer' }}>
+              <ChevronLeft size={18} /> Voltar
+            </button>
             <h2 className="page-title">{formData.nome}</h2>
-            <p style={{ color: 'var(--text-light)', marginTop: '0.5rem' }}>Perfil e histórico do paciente.</p>
+            <div style={{ display: 'flex', gap: '1.5rem', marginTop: '0.5rem', color: 'var(--text-light)' }}>
+              <span>{idade} anos</span>
+              <span>•</span>
+              <span>{formData.sexo}</span>
+              <span>•</span>
+              <span>{imc ? `IMC: ${imc}` : '--'}</span>
+            </div>
           </div>
-          <button onClick={() => navigate('/pacientes')} className="btn" style={{ width: 'auto', background: 'transparent', color: 'var(--text-light)', border: '1px solid var(--border)' }}>
-            Voltar para lista
-          </button>
         </header>
 
-        {error && <div className="error-message">{error}</div>}
-
-        {incompleteTabs.length > 0 && !success && (
-          <div className="error-message" style={{ backgroundColor: 'rgba(251, 191, 36, 0.1)', color: '#fbbf24', borderColor: 'rgba(251, 191, 36, 0.3)', marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '1rem', textAlign: 'left' }}>
-            <span style={{ fontSize: '1.5rem' }}>⚠️</span>
-            <div>
-              <strong>Cadastro Incompleto:</strong> Este paciente possui abas com campos em branco. 
-              Mantenha a ficha atualizada para um melhor acompanhamento.
-            </div>
+        {success && (
+          <div className="success-banner">
+            <CheckCircle size={20} /> Alterações salvas com sucesso!
           </div>
         )}
 
-        {success && <div className="error-message" style={{ backgroundColor: 'var(--primary)', color: 'white', borderColor: 'var(--primary-dark)' }}>
-          Dados atualizados com sucesso!
-        </div>}
+        {/* SEÇÃO 1: DADOS DO PACIENTE */}
+        <section className="list-card" style={{ marginBottom: '3rem' }}>
+          <div className="section-header">
+            <h3 className="section-title"><User size={24} /> Dados do Paciente</h3>
+          </div>
 
-        <div className="list-card" style={{ padding: '0' }}>
-          <div style={{ display: 'flex', borderBottom: '1px solid var(--border)' }}>
-            {['pessoal', 'clinico', 'habitos'].map(tab => (
-              <button
-                key={tab}
-                onClick={() => setActiveTab(tab)}
-                style={{
-                  flex: 1, padding: '1.25rem', background: 'transparent', border: 'none',
-                  color: activeTab === tab ? 'var(--primary)' : 'var(--text-light)',
-                  borderBottom: activeTab === tab ? '3px solid var(--primary)' : 'none',
-                  fontWeight: '700', textTransform: 'uppercase', fontSize: '0.85rem', cursor: 'pointer',
-                  position: 'relative'
+          <div style={{ display: 'flex', gap: '1rem', marginBottom: '2rem' }}>
+            {['pessoal', 'clinico', 'habitos'].map(t => (
+              <button 
+                key={t}
+                onClick={() => setActiveTab(t)}
+                className={`btn ${activeTab === t ? '' : 'btn-outline'}`}
+                style={{ 
+                  width: 'auto', 
+                  padding: '0.5rem 1.5rem', 
+                  fontSize: '0.85rem',
+                  background: activeTab === t ? 'var(--primary)' : 'rgba(16, 185, 129, 0.05)',
+                  border: activeTab === t ? 'none' : '1px solid var(--border)',
+                  color: activeTab === t ? 'white' : 'var(--text-light)'
                 }}
               >
-                {tab}
-                {incompleteTabs.includes(tab) && (
-                  <span style={{ position: 'absolute', top: '1rem', right: '1rem', width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#fbbf24', boxShadow: '0 0 10px #fbbf24' }}></span>
-                )}
+                {t.charAt(0).toUpperCase() + t.slice(1)}
               </button>
             ))}
           </div>
 
-          <form onSubmit={handleUpdate} style={{ padding: '2.5rem' }}>
+          <form onSubmit={handleUpdatePatient}>
             {activeTab === 'pessoal' && (
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
                 <div className="form-group" style={{ gridColumn: 'span 2' }}>
-                  <label htmlFor="nome">Nome Completo *</label>
-                  <input id="nome" type="text" value={formData.nome} onChange={handleChange} required />
+                  <label>Nome Completo</label>
+                  <input type="text" value={formData.nome} onChange={e => setFormData({...formData, nome: e.target.value})} />
                 </div>
                 <div className="form-group">
-                  <label htmlFor="data_nascimento">Data de Nascimento {idade !== null && `(${idade} anos)`}</label>
-                  <input id="data_nascimento" type="date" value={formData.data_nascimento} onChange={handleChange} />
+                  <label>Data de Nascimento</label>
+                  <input type="date" value={formData.data_nascimento} onChange={e => setFormData({...formData, data_nascimento: e.target.value})} />
                 </div>
                 <div className="form-group">
-                  <label htmlFor="sexo">Sexo</label>
-                  <select id="sexo" value={formData.sexo} onChange={handleChange}>
-                    <option value="">Selecione</option>
+                  <label>Sexo</label>
+                  <select value={formData.sexo} onChange={e => setFormData({...formData, sexo: e.target.value})}>
                     <option value="feminino">Feminino</option>
                     <option value="masculino">Masculino</option>
-                    <option value="outro">Outro</option>
                   </select>
                 </div>
                 <div className="form-group">
-                  <label htmlFor="telefone">Telefone</label>
-                  <input id="telefone" type="text" value={formData.telefone} onChange={handleChange} />
+                  <label>WhatsApp</label>
+                  <input type="text" value={formData.whatsapp} onChange={e => setFormData({...formData, whatsapp: e.target.value})} />
                 </div>
                 <div className="form-group">
-                  <label htmlFor="whatsapp">WhatsApp</label>
-                  <input id="whatsapp" type="text" value={formData.whatsapp} onChange={handleChange} />
-                </div>
-                <div className="form-group" style={{ gridColumn: 'span 2' }}>
-                  <label htmlFor="email">E-mail</label>
-                  <input id="email" type="email" value={formData.email} onChange={handleChange} />
+                  <label>E-mail</label>
+                  <input type="email" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} />
                 </div>
               </div>
             )}
 
             {activeTab === 'clinico' && (
-              <div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1.5rem', marginBottom: '2rem' }}>
-                  <div className="form-group">
-                    <label htmlFor="peso_inicial">Peso Atual (kg)</label>
-                    <div style={{ position: 'relative' }}>
-                      <input id="peso_inicial" type="number" step="0.1" value={formData.peso_inicial} onChange={handleChange} />
-                      <span style={{ position: 'absolute', right: '1rem', top: '50%', transform: 'translateY(-50%)', opacity: 0.5 }}>kg</span>
-                    </div>
-                  </div>
-                  <div className="form-group">
-                    <label htmlFor="altura">Altura (cm)</label>
-                    <div style={{ position: 'relative' }}>
-                      <input id="altura" type="number" value={formData.altura} onChange={handleChange} />
-                      <span style={{ position: 'absolute', right: '1rem', top: '50%', transform: 'translateY(-50%)', opacity: 0.5 }}>cm</span>
-                    </div>
-                  </div>
-                  <div className="form-group">
-                    <label>IMC (Auto)</label>
-                    <input readOnly value={imc || '--'} style={{ background: 'var(--primary-light)', border: '1.5px solid var(--primary)', color: 'var(--primary)' }} />
-                  </div>
-                </div>
-                {renderMultiChoice('Objetivos', 'objetivos', ['Emagrecer', 'Ganhar massa', 'Controlar diabetes', 'Saúde geral', 'Performance esportiva', 'Reeducação alimentar'])}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
                 <div className="form-group">
-                  <label htmlFor="objetivo_texto">Objetivo (Complemento)</label>
-                  <textarea id="objetivo_texto" value={formData.objetivo_texto} onChange={handleChange} />
+                  <label>Peso Inicial (kg)</label>
+                  <input type="number" step="0.1" value={formData.peso_inicial} onChange={e => setFormData({...formData, peso_inicial: e.target.value})} />
                 </div>
                 <div className="form-group">
-                  <label htmlFor="nivel_atividade">Nível de Atividade Física</label>
-                  <select id="nivel_atividade" value={formData.nivel_atividade} onChange={handleChange}>
-                    <option value="sedentario">Sedentário</option>
-                    <option value="leve">Levemente ativo</option>
-                    <option value="moderado">Moderadamente ativo</option>
-                    <option value="muito">Muito ativo</option>
-                    <option value="extremamente">Extremamente ativo</option>
-                  </select>
+                  <label>Altura (cm)</label>
+                  <input type="number" value={formData.altura} onChange={e => setFormData({...formData, altura: e.target.value})} />
                 </div>
-                {renderMultiChoice('Patologias', 'patologias', ['Nenhum', 'Diabetes', 'Hipertensão', 'Hipotireoidismo', 'Hipertireoidismo', 'Síndrome do ovário policístico', 'Doença celíaca', 'Colesterol alto'])}
-                {renderMultiChoice('Restrições Alimentares', 'restricoes_alimentares', ['Nenhum', 'Lactose', 'Glúten', 'Açúcar', 'Carne vermelha', 'Frutos do mar'])}
-                {renderMultiChoice('Alergias', 'alergias', ['Nenhum', 'Amendoim', 'Leite', 'Ovo', 'Soja', 'Trigo', 'Frutos do mar'])}
-                <div className="form-group">
-                  <label htmlFor="medicamentos">Medicamentos Contínuos</label>
-                  <input id="medicamentos" type="text" value={formData.medicamentos} onChange={handleChange} />
+                <div style={{ gridColumn: 'span 2' }}>
+                  {renderMultiChoice('Objetivos', 'objetivos', ['Emagrecer', 'Hipertrofia', 'Saúde', 'Performance'])}
                 </div>
-                <div className="form-group">
-                  <label htmlFor="suplementos">Suplementos em Uso</label>
-                  <input id="suplementos" type="text" value={formData.suplementos} onChange={handleChange} />
+                <div className="form-group" style={{ gridColumn: 'span 2' }}>
+                  <label>Patologias / Condições</label>
+                  <textarea value={formData.objetivo_texto} onChange={e => setFormData({...formData, objetivo_texto: e.target.value})} />
                 </div>
               </div>
             )}
 
             {activeTab === 'habitos' && (
-              <div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
-                  <div className="form-group">
-                    <label htmlFor="refeicoes_por_dia">Refeições/Dia</label>
-                    <input id="refeicoes_por_dia" type="number" value={formData.refeicoes_por_dia} onChange={handleChange} />
-                  </div>
-                  <div className="form-group">
-                    <label htmlFor="litros_agua">Água/Dia</label>
-                    <input id="litros_agua" type="number" step="0.1" value={formData.litros_agua} onChange={handleChange} />
-                  </div>
-                  <div className="form-group">
-                    <label htmlFor="horario_acorda">Horário que acorda</label>
-                    <input id="horario_acorda" type="text" value={formData.horario_acorda} onChange={handleChange} onBlur={(e) => setFormData(p => ({ ...p, horario_acorda: formatTime(e.target.value) }))} />
-                  </div>
-                  <div className="form-group">
-                    <label htmlFor="horario_dorme">Horário que dorme</label>
-                    <input id="horario_dorme" type="text" value={formData.horario_dorme} onChange={handleChange} onBlur={(e) => setFormData(p => ({ ...p, horario_dorme: formatTime(e.target.value) }))} />
-                  </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
+                <div className="form-group">
+                  <label>Refeições/Dia</label>
+                  <input type="number" value={formData.refeicoes_por_dia} onChange={e => setFormData({...formData, refeicoes_por_dia: e.target.value})} />
                 </div>
-                <div className="form-group" style={{ marginTop: '1.5rem' }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', cursor: 'pointer' }}>
-                    <input id="atividade_fisica" type="checkbox" checked={formData.atividade_fisica} onChange={handleChange} />
-                    <span>Pratica atividade física?</span>
-                  </label>
+                <div className="form-group">
+                  <label>Água/Dia (Litros)</label>
+                  <input type="number" step="0.1" value={formData.litros_agua} onChange={e => setFormData({...formData, litros_agua: e.target.value})} />
                 </div>
-                {formData.atividade_fisica && (
-                  <div className="form-group"><textarea id="atividade_fisica_descricao" value={formData.atividade_fisica_descricao} onChange={handleChange} /></div>
-                )}
+                <div className="form-group" style={{ gridColumn: 'span 2' }}>
+                  <label>Observações Adicionais</label>
+                  <textarea value={formData.observacoes} onChange={e => setFormData({...formData, observacoes: e.target.value})} />
+                </div>
               </div>
             )}
 
-            <div style={{ display: 'flex', gap: '1rem', marginTop: '2.5rem', justifyContent: 'flex-end' }}>
-              <button type="submit" className="btn" disabled={saving} style={{ width: 'auto', padding: '1rem 3rem' }}>
-                {saving ? 'Atualizando...' : 'Salvar Alterações'}
+            <div style={{ marginTop: '2rem', display: 'flex', justifyContent: 'flex-end' }}>
+              <button type="submit" className="btn" disabled={saving} style={{ width: 'auto', padding: '0.8rem 2rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <Save size={18} /> {saving ? 'Salvando...' : 'Salvar Alterações'}
               </button>
             </div>
           </form>
-        </div>
+        </section>
+
+        {/* SEÇÃO 2: CONSULTAS */}
+        <section className="list-card" style={{ marginBottom: '3rem' }}>
+          <div className="section-header">
+            <h3 className="section-title"><Activity size={24} /> Evolução e Consultas</h3>
+            <button onClick={() => setShowModal(true)} className="btn" style={{ width: 'auto', padding: '0.6rem 1.2rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.9rem' }}>
+              <Plus size={18} /> Nova Consulta
+            </button>
+          </div>
+
+          <div className="chart-container">
+            {consultas.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={chartData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+                  <XAxis dataKey="data" stroke="var(--text-light)" fontSize={12} tickLine={false} axisLine={false} />
+                  <YAxis stroke="var(--text-light)" fontSize={12} tickLine={false} axisLine={false} domain={['dataMin - 2', 'dataMax + 2']} />
+                  <Tooltip 
+                    contentStyle={{ background: 'var(--card-bg)', border: '1px solid var(--border)', borderRadius: '10px', color: 'var(--text)' }}
+                    itemStyle={{ color: 'var(--primary)' }}
+                  />
+                  <Line type="monotone" dataKey="peso" stroke="var(--primary)" strokeWidth={3} dot={{ r: 6, fill: 'var(--primary)', strokeWidth: 2, stroke: 'white' }} activeDot={{ r: 8 }} />
+                </LineChart>
+              </ResponsiveContainer>
+            ) : (
+              <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-light)', opacity: 0.5 }}>
+                Nenhuma consulta registrada ainda
+              </div>
+            )}
+          </div>
+
+          <div className="history-list">
+            {consultas.map(c => (
+              <div key={c.id} className="history-item">
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                    <Calendar size={18} className="text-primary" style={{ color: 'var(--primary)' }} />
+                    <strong style={{ fontSize: '1.1rem' }}>{new Date(c.data_consulta).toLocaleDateString('pt-BR')}</strong>
+                  </div>
+                  <div className="badge">{c.peso} kg</div>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem', fontSize: '0.85rem', color: 'var(--text-light)' }}>
+                  <div><strong>Cintura:</strong> {c.cintura || '--'} cm</div>
+                  <div><strong>Quadril:</strong> {c.quadril || '--'} cm</div>
+                  <div><strong>Gordura:</strong> {c.percentual_gordura || '--'} %</div>
+                  <div><strong>Retorno:</strong> {c.proximo_retorno ? new Date(c.proximo_retorno).toLocaleDateString('pt-BR') : '--'}</div>
+                </div>
+                {c.observacoes && (
+                  <div style={{ marginTop: '1rem', padding: '1rem', background: 'rgba(2, 44, 34, 0.2)', borderRadius: '8px', fontSize: '0.9rem', color: 'var(--text-light)' }}>
+                    {c.observacoes}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* SEÇÃO 3: PLANOS ALIMENTARES */}
+        <section className="list-card">
+          <div className="section-header">
+            <h3 className="section-title"><FileText size={24} /> Planos Alimentares</h3>
+            <button className="btn" style={{ width: 'auto', padding: '0.6rem 1.2rem', display: 'flex', alignItems: 'center', gap: '0.5rem', opacity: 0.7, cursor: 'not-allowed' }}>
+              Gerar Plano Alimentar
+            </button>
+          </div>
+
+          {planos.length > 0 ? (
+            <div className="history-list">
+              {planos.map(p => (
+                <div key={p.id} className="history-item" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                    <Clock size={20} style={{ color: 'var(--primary)' }} />
+                    <div>
+                      <div style={{ fontWeight: '700' }}>Plano Gerado em {new Date(p.created_at).toLocaleDateString('pt-BR')}</div>
+                      <div style={{ fontSize: '0.8rem', color: 'var(--text-light)' }}>Versão {new Date(p.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</div>
+                    </div>
+                  </div>
+                  <ArrowRight size={20} style={{ opacity: 0.5 }} />
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="empty-state" style={{ padding: '2rem', textAlign: 'center' }}>
+              Nenhum plano alimentar gerado ainda
+            </div>
+          )}
+        </section>
+
+        {/* MODAL NOVA CONSULTA */}
+        {showModal && (
+          <div className="modal-overlay">
+            <div className="modal-content">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
+                <h3 style={{ margin: 0 }}>Nova Consulta</h3>
+                <button onClick={() => setShowModal(false)} style={{ background: 'transparent', border: 'none', color: 'var(--text-light)', fontSize: '1.5rem', cursor: 'pointer' }}>&times;</button>
+              </div>
+
+              <form onSubmit={handleAddConsulta}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
+                  <div className="form-group">
+                    <label>Data da Consulta</label>
+                    <input type="date" value={novaConsulta.data_consulta} onChange={e => setNovaConsulta({...novaConsulta, data_consulta: e.target.value})} required />
+                  </div>
+                  <div className="form-group">
+                    <label>Peso Atual (kg)</label>
+                    <input type="number" step="0.1" value={novaConsulta.peso} onChange={e => setNovaConsulta({...novaConsulta, peso: e.target.value})} required />
+                  </div>
+                  <div className="form-group">
+                    <label>Cintura (cm)</label>
+                    <input type="number" value={novaConsulta.cintura} onChange={e => setNovaConsulta({...novaConsulta, cintura: e.target.value})} />
+                  </div>
+                  <div className="form-group">
+                    <label>Quadril (cm)</label>
+                    <input type="number" value={novaConsulta.quadril} onChange={e => setNovaConsulta({...novaConsulta, quadril: e.target.value})} />
+                  </div>
+                  <div className="form-group">
+                    <label>% de Gordura</label>
+                    <input type="number" step="0.1" value={novaConsulta.percentual_gordura} onChange={e => setNovaConsulta({...novaConsulta, percentual_gordura: e.target.value})} />
+                  </div>
+                  <div className="form-group">
+                    <label>Próximo Retorno</label>
+                    <input type="date" value={novaConsulta.proximo_retorno} onChange={e => setNovaConsulta({...novaConsulta, proximo_retorno: e.target.value})} />
+                  </div>
+                  <div className="form-group" style={{ gridColumn: 'span 2' }}>
+                    <label>Observações</label>
+                    <textarea value={novaConsulta.observacoes} onChange={e => setNovaConsulta({...novaConsulta, observacoes: e.target.value})} />
+                  </div>
+                </div>
+
+                <div style={{ marginTop: '2.5rem' }}>
+                  <button type="submit" className="btn" disabled={saving}>
+                    {saving ? 'Salvando...' : 'Salvar Consulta'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
       </main>
     </div>
   )
