@@ -13,7 +13,12 @@ import {
   Calendar,
   Weight,
   Clock,
-  ArrowRight
+  ArrowRight,
+  Brain,
+  Sparkles,
+  RefreshCw,
+  Trash2,
+  Download
 } from 'lucide-react'
 import { 
   LineChart, 
@@ -34,6 +39,10 @@ const PerfilPaciente = () => {
   const [success, setSuccess] = useState(false)
   const [activeTab, setActiveTab] = useState('pessoal')
   const [showModal, setShowModal] = useState(false)
+  const [showPlanModal, setShowPlanModal] = useState(false)
+  const [gerandoPlano, setGerandoPlano] = useState(false)
+  const [planoEditavel, setPlanoEditavel] = useState(null)
+  const [visualizandoPlanoId, setVisualizandoPlanoId] = useState(null)
 
   const [formData, setFormData] = useState({
     nome: '',
@@ -191,6 +200,64 @@ const PerfilPaciente = () => {
       fetchData()
     }
     setSaving(false)
+  }
+
+  const handleGerarPlano = async () => {
+    setGerandoPlano(true)
+    setError(null)
+    try {
+      const response = await fetch('/api/gerar-plano', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ patientData: formData })
+      })
+      
+      const data = await response.json()
+      if (data.error) throw new Error(data.error)
+      
+      setPlanoEditavel(data.plano_semanal)
+      setVisualizandoPlanoId(null)
+      setShowPlanModal(true)
+    } catch (err) {
+      setError('Erro ao gerar plano: ' + err.message)
+    } finally {
+      setGerandoPlano(false)
+    }
+  }
+
+  const handleSavePlano = async () => {
+    setSaving(true)
+    try {
+      const { error: dbError } = await supabase
+        .from('planos_alimentares')
+        .insert([{
+          paciente_id: id,
+          conteudo: { plano_semanal: planoEditavel }
+        }])
+
+      if (dbError) throw dbError
+      
+      setSuccess(true)
+      setTimeout(() => setSuccess(false), 3000)
+      setShowPlanModal(false)
+      fetchData()
+    } catch (err) {
+      setError('Erro ao salvar plano: ' + err.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleOpenPlano = (plano) => {
+    setPlanoEditavel(plano.conteudo.plano_semanal)
+    setVisualizandoPlanoId(plano.id)
+    setShowPlanModal(true)
+  }
+
+  const handleEditRefeicao = (diaIdx, refeicaoKey, optIdx, value) => {
+    const novoPlano = [...planoEditavel]
+    novoPlano[diaIdx].refeicoes[refeicaoKey][optIdx] = value
+    setPlanoEditavel(novoPlano)
   }
 
   const chartData = [...consultas]
@@ -422,24 +489,36 @@ const PerfilPaciente = () => {
           </div>
         </section>
 
-        {/* SEÇÃO 3: PLANOS ALIMENTARES */}
         <section className="list-card">
           <div className="section-header">
-            <h3 className="section-title"><FileText size={24} /> Planos Alimentares</h3>
-            <button className="btn" style={{ width: 'auto', padding: '0.6rem 1.2rem', display: 'flex', alignItems: 'center', gap: '0.5rem', opacity: 0.7, cursor: 'not-allowed' }}>
-              Gerar Plano Alimentar
+            <h3 className="section-title"><Brain size={24} /> Plano Alimentar IA</h3>
+            <button 
+              onClick={handleGerarPlano} 
+              className="btn" 
+              disabled={gerandoPlano}
+              style={{ width: 'auto', padding: '0.6rem 1.2rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+            >
+              {gerandoPlano ? <RefreshCw size={18} className="animate-spin" /> : <Sparkles size={18} />}
+              {gerandoPlano ? 'Gerando com IA...' : 'Gerar Novo Plano'}
             </button>
           </div>
 
           {planos.length > 0 ? (
             <div className="history-list">
               {planos.map(p => (
-                <div key={p.id} className="history-item" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div 
+                  key={p.id} 
+                  className="history-item" 
+                  onClick={() => handleOpenPlano(p)}
+                  style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}
+                >
                   <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                    <Clock size={20} style={{ color: 'var(--primary)' }} />
+                    <div style={{ background: 'rgba(16, 185, 129, 0.1)', padding: '0.75rem', borderRadius: '10px' }}>
+                      <FileText size={20} style={{ color: 'var(--primary)' }} />
+                    </div>
                     <div>
-                      <div style={{ fontWeight: '700' }}>Plano Gerado em {new Date(p.created_at).toLocaleDateString('pt-BR')}</div>
-                      <div style={{ fontSize: '0.8rem', color: 'var(--text-light)' }}>Versão {new Date(p.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</div>
+                      <div style={{ fontWeight: '700' }}>Plano de {new Date(p.created_at).toLocaleDateString('pt-BR')}</div>
+                      <div style={{ fontSize: '0.8rem', color: 'var(--text-light)' }}>{new Date(p.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</div>
                     </div>
                   </div>
                   <ArrowRight size={20} style={{ opacity: 0.5 }} />
@@ -448,7 +527,7 @@ const PerfilPaciente = () => {
             </div>
           ) : (
             <div className="empty-state" style={{ padding: '2rem', textAlign: 'center' }}>
-              Nenhum plano alimentar gerado ainda
+              Nenhum plano alimentar gerado ainda. Clique no botão acima para começar.
             </div>
           )}
         </section>
@@ -500,6 +579,71 @@ const PerfilPaciente = () => {
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        )}
+        {/* MODAL PLANO ALIMENTAR (IA) */}
+        {showPlanModal && planoEditavel && (
+          <div className="modal-overlay">
+            <div className="modal-content" style={{ maxWidth: '1000px', width: '95%', maxHeight: '90vh' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
+                <div>
+                  <h3 style={{ margin: 0 }}>Plano Alimentar Semanal</h3>
+                  <p style={{ color: 'var(--text-light)', fontSize: '0.9rem' }}>
+                    {visualizandoPlanoId ? 'Visualizando plano salvo' : 'Revise e edite as sugestões da IA antes de salvar'}
+                  </p>
+                </div>
+                <button onClick={() => setShowPlanModal(false)} style={{ background: 'transparent', border: 'none', color: 'var(--text-light)', fontSize: '1.5rem', cursor: 'pointer' }}>&times;</button>
+              </div>
+
+              <div style={{ overflowY: 'auto', maxHeight: 'calc(90vh - 180px)', paddingRight: '0.5rem' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '2rem' }}>
+                  {planoEditavel.map((dia, diaIdx) => (
+                    <div key={dia.dia} className="list-card" style={{ background: 'rgba(16, 185, 129, 0.02)', border: '1px solid var(--border)' }}>
+                      <h4 style={{ color: 'var(--primary)', marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <Calendar size={18} /> {dia.dia}
+                      </h4>
+                      
+                      {Object.entries(dia.refeicoes).map(([refKey, opcoes]) => (
+                        <div key={refKey} style={{ marginBottom: '1.5rem' }}>
+                          <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '700', textTransform: 'uppercase', marginBottom: '0.5rem', color: 'var(--text-light)' }}>
+                            {refKey.replace(/_/g, ' ')}
+                          </label>
+                          {opcoes.map((opt, optIdx) => (
+                            <input
+                              key={optIdx}
+                              type="text"
+                              value={opt}
+                              onChange={(e) => handleEditRefeicao(diaIdx, refKey, optIdx, e.target.value)}
+                              style={{ 
+                                marginBottom: '0.3rem', 
+                                fontSize: '0.85rem', 
+                                padding: '0.5rem 0.75rem',
+                                border: '1px solid transparent',
+                                background: 'rgba(255,255,255,0.05)'
+                              }}
+                              placeholder={`Opção ${optIdx + 1}`}
+                            />
+                          ))}
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div style={{ marginTop: '2.5rem', display: 'flex', justifyContent: 'flex-end', gap: '1rem' }}>
+                {!visualizandoPlanoId && (
+                  <button onClick={handleSavePlano} className="btn" disabled={saving} style={{ width: 'auto', padding: '0.8rem 2.5rem' }}>
+                    {saving ? 'Salvando...' : 'Salvar Plano Alimentar'}
+                  </button>
+                )}
+                {visualizandoPlanoId && (
+                  <button className="btn btn-outline" style={{ width: 'auto', padding: '0.8rem 2.5rem' }}>
+                    <Download size={18} style={{ marginRight: '0.5rem' }} /> Exportar PDF
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         )}
