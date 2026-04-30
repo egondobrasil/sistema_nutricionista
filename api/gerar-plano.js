@@ -1,4 +1,22 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import { z } from "zod";
+
+const refeicaoSchema = z.array(z.string()).length(5);
+
+const diaSchema = z.object({
+  dia: z.string(),
+  refeicoes: z.object({
+    cafe_da_manha: refeicaoSchema,
+    lanche_manha: refeicaoSchema,
+    almoco: refeicaoSchema,
+    lanche_tarde: refeicaoSchema,
+    jantar: refeicaoSchema,
+  })
+});
+
+const planoAlimentarSchema = z.object({
+  plano_semanal: z.array(diaSchema).length(7)
+});
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -60,9 +78,20 @@ export default async function handler(req, res) {
     
     // Limpeza extra caso a IA inclua blocos de código markdown
     const jsonStr = text.replace(/```json/g, '').replace(/```/g, '').trim();
-    const data = JSON.parse(jsonStr);
+    const parsedData = JSON.parse(jsonStr);
 
-    return res.status(200).json(data);
+    // Validação com Zod
+    const validation = planoAlimentarSchema.safeParse(parsedData);
+    
+    if (!validation.success) {
+      console.error("Erro de validação do esquema Zod:", validation.error.format());
+      return res.status(422).json({ 
+        error: 'A IA retornou um formato inválido.', 
+        details: validation.error.errors 
+      });
+    }
+
+    return res.status(200).json(validation.data);
   } catch (error) {
     console.error('Erro na API Gemini:', error);
     return res.status(500).json({ 
