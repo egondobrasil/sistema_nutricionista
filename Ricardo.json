@@ -1,0 +1,27 @@
+[
+	{
+		"nome": "Ricardo Emanuel Barros",
+		"idade": 29,
+		"cpf": "281.372.217-00",
+		"rg": "41.227.168-0",
+		"data_nasc": "01/04/1997",
+		"sexo": "Masculino",
+		"signo": "Áries",
+		"mae": "Raquel Josefa Betina",
+		"pai": "Ryan Gabriel Gustavo Barros",
+		"email": "ricardo.emanuel.barros@editorazap.com.br",
+		"senha": "bqhrLfcrYO",
+		"cep": "57081-488",
+		"endereco": "Via Em Projeto 3",
+		"numero": 704,
+		"bairro": "Tabuleiro do Martins",
+		"cidade": "Maceió",
+		"estado": "AL",
+		"telefone_fixo": "(82) 3702-3007",
+		"celular": "(82) 99884-7796",
+		"altura": "1,80",
+		"peso": 106,
+		"tipo_sanguineo": "O+",
+		"cor": "azul"
+	}
+]

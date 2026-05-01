@@ -1,0 +1,7 @@
+feat: integração de Inteligência Artificial para geração de plano alimentar
+
+- `api/gerar-plano.js`: Criação do endpoint serverless para comunicação segura com a API do Google Gemini, configurado com validação Zod para garantir o retorno de um JSON estruturado.
+- `src/pages/PerfilPaciente.jsx`: Implementação completa da interface da IA. Adicionado botão de geração com estado de carregamento animado, modal de revisão editável para as sugestões da IA, integração com o Supabase para salvamento e listagem visual do histórico de planos do paciente.
+- `package.json` / `package-lock.json`: Instalação das bibliotecas `@google/generative-ai` (para a IA) e `zod` (para validação de dados).
+- `Ricardo.json`: Criação do arquivo de dados base do paciente de testes Ricardo Emanuel Barros.
+- `scratch/*`: Criação de scripts auxiliares temporários de teste de banco de dados, inserção rápida e simulação da resposta da IA via terminal.
