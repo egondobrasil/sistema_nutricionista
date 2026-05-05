@@ -225,15 +225,45 @@ const PerfilPaciente = () => {
     }
   }
 
+  const handlePlanoManual = () => {
+    const planoVazio = [
+      "Segunda-feira", "Terça-feira", "Quarta-feira", "Quinta-feira", "Sexta-feira", "Sábado", "Domingo"
+    ].map(dia => ({
+      dia,
+      refeicoes: {
+        cafe_da_manha: ["", "", "", "", ""],
+        lanche_manha: ["", "", "", "", ""],
+        almoco: ["", "", "", "", ""],
+        lanche_tarde: ["", "", "", "", ""],
+        jantar: ["", "", "", "", ""]
+      }
+    }))
+    setPlanoEditavel(planoVazio)
+    setVisualizandoPlanoId(null)
+    setShowPlanModal(true)
+  }
+
   const handleSavePlano = async () => {
     setSaving(true)
     try {
-      const { error: dbError } = await supabase
-        .from('planos_alimentares')
-        .insert([{
-          paciente_id: id,
-          conteudo: { plano_semanal: planoEditavel }
-        }])
+      const payload = {
+        paciente_id: id,
+        conteudo: { plano_semanal: planoEditavel }
+      }
+
+      let dbError;
+      if (visualizandoPlanoId) {
+        const { error } = await supabase
+          .from('planos_alimentares')
+          .update(payload)
+          .eq('id', visualizandoPlanoId)
+        dbError = error
+      } else {
+        const { error } = await supabase
+          .from('planos_alimentares')
+          .insert([payload])
+        dbError = error
+      }
 
       if (dbError) throw dbError
       
@@ -492,15 +522,24 @@ const PerfilPaciente = () => {
         <section className="list-card">
           <div className="section-header">
             <h3 className="section-title"><Brain size={24} /> Plano Alimentar IA</h3>
-            <button 
-              onClick={handleGerarPlano} 
-              className="btn" 
-              disabled={gerandoPlano}
-              style={{ width: 'auto', padding: '0.6rem 1.2rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
-            >
-              {gerandoPlano ? <RefreshCw size={18} className="animate-spin" /> : <Sparkles size={18} />}
-              {gerandoPlano ? 'Gerando com IA...' : 'Gerar Novo Plano'}
-            </button>
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <button 
+                onClick={handlePlanoManual} 
+                className="btn btn-outline" 
+                style={{ width: 'auto', padding: '0.6rem 1.2rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+              >
+                <Plus size={18} /> Plano Manual
+              </button>
+              <button 
+                onClick={handleGerarPlano} 
+                className="btn" 
+                disabled={gerandoPlano}
+                style={{ width: 'auto', padding: '0.6rem 1.2rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+              >
+                {gerandoPlano ? <RefreshCw size={18} className="animate-spin" /> : <Sparkles size={18} />}
+                {gerandoPlano ? 'Gerando com IA...' : 'Gerar Novo Plano'}
+              </button>
+            </div>
           </div>
 
           {planos.length > 0 ? (
@@ -633,11 +672,9 @@ const PerfilPaciente = () => {
               </div>
 
               <div style={{ marginTop: '2.5rem', display: 'flex', justifyContent: 'flex-end', gap: '1rem' }}>
-                {!visualizandoPlanoId && (
-                  <button onClick={handleSavePlano} className="btn" disabled={saving} style={{ width: 'auto', padding: '0.8rem 2.5rem' }}>
-                    {saving ? 'Salvando...' : 'Salvar Plano Alimentar'}
-                  </button>
-                )}
+                <button onClick={handleSavePlano} className="btn" disabled={saving} style={{ width: 'auto', padding: '0.8rem 2.5rem' }}>
+                  {saving ? 'Salvando...' : visualizandoPlanoId ? 'Atualizar Plano' : 'Salvar Plano Alimentar'}
+                </button>
                 {visualizandoPlanoId && (
                   <button className="btn btn-outline" style={{ width: 'auto', padding: '0.8rem 2.5rem' }}>
                     <Download size={18} style={{ marginRight: '0.5rem' }} /> Exportar PDF
